@@ -5,11 +5,11 @@ from google.oauth2 import service_account
 # Initialiser Flask
 app = Flask(__name__)
 
-# Chemin vers le fichier JSON du compte de service
-SERVICE_ACCOUNT_FILE = "/storage/emulated/0/Documents/Python /mineral-style-452116-r7-e214479af6cc.json"
+# Lire le fichier JSON depuis les variables d'environnement
+SERVICE_ACCOUNT_INFO = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+credentials = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 
 service = build("sheets", "v4", credentials=credentials)
 
