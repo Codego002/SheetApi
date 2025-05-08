@@ -213,7 +213,7 @@ def read_tab3():
 def get_keys_data_tab4():
     result = service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="Feuille 4!A:G"
+        range="Feuille 4!A:H"  # 🆗 inclut la colonne Message
     ).execute()
     return result.get("values", [])
 
@@ -225,7 +225,10 @@ def validate_key():
     user_id = payload.get("userId")
 
     if not key or not user_id:
-        return jsonify({"valid": False}), 400
+        return jsonify({
+            "valid": False,
+            "message": "⛔ Clé ou utilisateur manquant."
+        }), 400
 
     now = datetime.now()
     now_full = now.strftime("%d-%m-%y %H:%M:%S")
@@ -240,23 +243,27 @@ def validate_key():
     updated = False
 
     for row in data:
-        row += [""] * (7 - len(row))  # A:G
-        k, compteur, limite, statut, utilisateur, last_used, history = row
+        row += [""] * (8 - len(row))  # A:H
+        k, compteur, limite, statut, utilisateur, last_used, history, custom_msg = row
 
         if k == key:
             found = True
             compteur = int(compteur) if compteur.isdigit() else 0
             limite = int(limite) if limite.isdigit() else 0
             statut = statut.strip()
+            custom_msg = custom_msg.strip() if custom_msg else ""
 
-            # ❌ Si la clé est bloquée manuellement → retour immédiat
+            # ❌ Si la clé est bloquée manuellement
             if "bloquée" in statut.lower():
-                return jsonify({"valid": False})
+                return jsonify({
+                    "valid": False,
+                    "message": custom_msg or "🚫 Clé bloquée par l'administrateur."
+                })
 
-            # ✅ Bloquer si compteur atteint la limite
+            # ❌ Si la limite est atteinte
             if compteur >= limite:
                 statut = "❌️ Bloquée"
-                updated_data.append([k, str(compteur), str(limite), statut, utilisateur, last_used, history])
+                updated_data.append([k, str(compteur), str(limite), statut, utilisateur, last_used, history, custom_msg])
                 updated = True
                 break
 
@@ -266,7 +273,7 @@ def validate_key():
             elif user_id not in utilisateur.split():
                 utilisateur += f" {user_id}"
 
-            # 🧮 Mise à jour du compteur
+            # 🧮 Mise à jour compteur
             compteur += 1
 
             # 🕓 Historique
@@ -274,37 +281,43 @@ def validate_key():
                 history += f" {now_full.split()[1]}"
             else:
                 history += f" {now_full}"
-
             last_used = now_date
 
-            # ✅ Ne rien toucher au statut ici : il reste actif sauf si limite atteinte
+            # ✅ Ne pas modifier le statut ici (on respecte l’état manuel)
             updated_data.append([
                 k,
                 str(compteur),
                 str(limite),
-                statut,  # garder tel quel
+                statut,
                 utilisateur.strip(),
                 last_used,
-                history.strip()
+                history.strip(),
+                custom_msg
             ])
             updated = True
         else:
             updated_data.append(row)
 
     if not found:
-        return jsonify({"valid": False}), 404
+        return jsonify({
+            "valid": False,
+            "message": "❌ Clé inconnue ou introuvable."
+        }), 404
 
     if updated:
         values_to_write = [header] + updated_data
         service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range="Feuille 4!A:G",
+            range="Feuille 4!A:H",
             valueInputOption="RAW",
             body={"values": values_to_write}
         ).execute()
         return jsonify({"valid": True})
 
-    return jsonify({"valid": False})
+    return jsonify({
+        "valid": False,
+        "message": "⛔ Erreur inconnue lors de la mise à jour."
+    })
 
 # 📌 Lancer l'application Flask
 if __name__ == '__main__':
