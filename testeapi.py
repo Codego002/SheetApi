@@ -227,7 +227,7 @@ def validate_key():
     if not key or not user_id:
         return jsonify({
             "valid": False,
-            "message": "⛔ Clé ou utilisateur manquant."
+            "message": "⛔ Clé  manquant."
         }), 400
 
     now = datetime.now()
