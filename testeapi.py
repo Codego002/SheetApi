@@ -278,7 +278,8 @@ def validate_key():
             last_used = now_date
 
             # ✅ Si compteur atteint limite → bloquer
-            statut = "❌️ Bloquée" if compteur >= limite else "✅️ Active"
+            if compteur >= limite:
+                statut = "❌️ Bloquée"
 
             updated_data.append([
                 k,
