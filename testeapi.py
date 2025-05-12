@@ -217,6 +217,66 @@ def get_keys_data_tab4():
     ).execute()
     return result.get("values", [])
 
+# 📌 Charger les données de Feuille 5
+def get_users_data_tab5():
+    result = service.spreadsheets().values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range="Feuille 5!A:E"  # Plage correspondant à Feuille 5
+    ).execute()
+    return result.get("values", [])
+
+# 📌 Mise à jour ou ajout de l'utilisateur dans Feuille 5
+def update_or_add_user_in_tab5(user_id, key, statut, custom_msg):
+    user_rows = get_users_data_tab5()
+    header = user_rows[0] if user_rows else ["Utilisateur", "Clé", "Compteur", "Statut", "Message personnalisé"]
+    user_data = user_rows[1:] if len(user_rows) > 1 else []
+
+    # Chercher si l'utilisateur existe déjà
+    found_user = False
+    for idx, urow in enumerate(user_data):
+        urow += [""] * (5 - len(urow))  # Remplir les données manquantes
+        u_name, u_keys, u_count, u_status, u_msg = urow
+
+        # Si l'utilisateur est trouvé dans la Feuille 5
+        if u_name.strip() == user_id:
+            found_user = True
+            # Vérifier le statut de l'utilisateur
+            if "bloqué" in u_status.lower():
+                return False, u_msg if u_msg else "Utilisateur bloqué."
+
+            u_count = int(u_count) if u_count.isdigit() else 0  # S'assurer que c'est bien un entier
+            u_keys = u_keys.split() if u_keys else []  # Convertir les clés concaténées en liste
+            if key not in u_keys:
+                u_keys.append(key)  # Ajouter la nouvelle clé
+            u_keys = " ".join(u_keys)  # Re-joindre les clés
+
+            # Incrémenter le compteur des requêtes
+            u_count += 1
+
+            # Mettre à jour le statut si nécessaire
+            if statut == "❌️ Bloquée":
+                u_status = "❌️ Bloquée"
+                u_msg = custom_msg  # Message personnalisé si bloqué
+            else:
+                u_status = "✅️ Active"
+
+            # Mise à jour de la ligne dans le tableau
+            user_data[idx] = [u_name, u_keys, str(u_count), u_status, u_msg]
+            break
+    else:
+        # Si l'utilisateur n'existe pas encore dans la feuille, on l'ajoute
+        user_data.append([user_id, key, "1", "✅️ Active", custom_msg])
+
+    # Remettre les données mises à jour dans Feuille 5
+    values_to_write = [header] + user_data
+    service.spreadsheets().values().update(
+        spreadsheetId=SPREADSHEET_ID,
+        range="Feuille 5!A:E",  # Plage correspondant à Feuille 5
+        valueInputOption="RAW",
+        body={"values": values_to_write}
+    ).execute()
+    return True, None  # Retourne True si l'utilisateur est actif, None pour le message
+
 # 📌 Route de validation de clé
 @app.route('/validate-key', methods=['POST'])
 def validate_key():
@@ -227,7 +287,7 @@ def validate_key():
     if not key or not user_id:
         return jsonify({
             "valid": False,
-            "message": "⛔ Clé  manquant."
+            "message": "⛔ Clé ou utilisateur manquant."
         }), 400
 
     now = datetime.now()
@@ -235,8 +295,8 @@ def validate_key():
     now_date = now.strftime("%d-%m-%y")
 
     rows = get_keys_data_tab4()
-    header = rows[0]
-    data = rows[1:]
+    header = rows[0] if rows else ["Clé", "Compteur", "Limite", "Statut", "Utilisateur", "Dernière utilisation", "Historique", "Message"]
+    data = rows[1:] if len(rows) > 1 else []
 
     updated_data = []
     found = False
@@ -305,6 +365,7 @@ def validate_key():
         }), 404
 
     if updated:
+        # Mise à jour de Feuille 4
         values_to_write = [header] + updated_data
         service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
@@ -312,6 +373,15 @@ def validate_key():
             valueInputOption="RAW",
             body={"values": values_to_write}
         ).execute()
+
+        # Vérification et mise à jour dans Feuille 5
+        valid, message = update_or_add_user_in_tab5(user_id, key, statut, custom_msg)
+        if not valid:
+            return jsonify({
+                "valid": False,
+                "message": message
+            })
+        
         return jsonify({"valid": True})
 
     return jsonify({
